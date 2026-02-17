@@ -1,0 +1,63 @@
+// ==UserScript==
+// @name         Drumeo Quick Filter Buttons
+// @namespace    http://tampermonkey.net/
+// @version      2.0
+// @description  Adds quick filter shortcut buttons to Drumeo tab bar
+// @match        https://app.musora.com/*
+// @grant        GM_addStyle
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    const shortcuts = [
+        { label: 'Lives',filters: 'type,Live+Archives'},
+        { label: 'Guided Courses',filters: 'type,Guided+Courses' },
+        { label: 'Course Collections',filters: 'type,Course+Collections' },
+        { label: 'Courses', filters:'type,Courses'},
+        { label: 'Practice-Alongs',filters: 'type,Practice+Alongs' },
+        { label: 'Rudiments', url: '/results?q=rudiment' },
+    ];
+
+    const baseURL = '/drumeo/lessons/filters';
+    const defaultSort = '-published_on';
+
+function inject() {
+    if (!window.location.pathname.startsWith('/drumeo/lessons')) return;
+
+    const tabContainer = document.querySelector('.filter-section__tabs-container .filter-section__tabs');
+    if (!tabContainer || tabContainer.querySelector('.dqf-custom')) return;
+
+        const sep = document.createElement('span');
+        sep.className = 'dqf-separator';
+        tabContainer.appendChild(sep);
+
+        shortcuts.forEach(s => {
+            const btn = document.createElement('a');
+            btn.href = s.url || `${baseURL}?filters=${encodeURI(s.filters)}&sort=${defaultSort}`;
+            btn.textContent = s.label;
+            btn.className = 'tab-button dqf-custom';
+            btn.setAttribute('data-v-34b9b5f5', '');
+            btn.setAttribute('data-v-a071697c', '');
+
+            tabContainer.appendChild(btn);
+        });
+    }
+
+    setInterval(inject, 1000);
+
+    GM_addStyle(`
+    .filter-section__tabs {
+        flex-wrap: wrap !important;
+    }
+        .dqf-separator {
+            display: inline-block;
+            width: 1px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            margin: 0 4px;
+            vertical-align: middle;
+            align-self: center;
+        }
+    `);
+})();
