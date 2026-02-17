@@ -1,0 +1,104 @@
+// ==UserScript==
+// @name         Musora Assignment Tracker
+// @namespace    http://tampermonkey.net/
+// @version      3.3
+// @description  Track assignment completion with persistent checkboxes
+// @match        https://app.musora.com/*
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @run-at       document-idle
+// ==/UserScript==
+(function () {
+    'use strict';
+    const URL_PATTERNS = [
+        // Playlist URL: /playlists/{playlistId}/{entryId}/{lessonId}
+        { pattern: /\/playlists\/[^/]+\/[^/]+\/(\d+)/, keys: (m) => ({ lesson: m[1] }) },
+        // Course URL: /{brand}/lessons/course/{courseId}/{lessonId}
+        { pattern: /\/[^/]+\/lessons\/course\/[^/]+\/(\d+)/, keys: (m) => ({ lesson: m[1] }) },
+        // Other lesson URL: /{brand}/lessons/{type}/{lessonId}
+        { pattern: /\/[^/]+\/lessons\/[^/]+\/(\d+)/, keys: (m) => ({ lesson: m[1] }) },
+    ];
+    const CARD_SELECTOR = 'div.p-6.bg-mu-2';
+    const CHECKBOX_CLASS = 'assignment-tracker-checkbox';
+    let lessonId, storageKey, completed;
+    let processed = new WeakSet();
+    let active = false;
+    function matchUrl(pathname) {
+        for (const { pattern, keys } of URL_PATTERNS) {
+            const m = pathname.match(pattern);
+            if (m) return keys(m);
+        }
+        return null;
+    }
+    function cleanup() {
+        document.querySelectorAll('.' + CHECKBOX_CLASS).forEach((el) => el.remove());
+        document.querySelectorAll(CARD_SELECTOR).forEach((card) => {
+            card.style.opacity = '';
+            card.style.border = '';
+        });
+        processed = new WeakSet();
+    }
+    function initialize() {
+        cleanup();
+        const result = matchUrl(window.location.pathname);
+        active = !!result;
+        if (!active) return;
+        lessonId = result.lesson;
+        storageKey = `assignments_lesson_${lessonId}`;
+        completed = GM_getValue(storageKey, {});
+        processCards();
+    }
+    function applyVisualState(card, isDone) {
+        card.style.opacity = isDone ? '0.6' : '1';
+        card.style.border = isDone ? '2px solid #22c55e' : '';
+    }
+    function addCheckbox(card) {
+        if (processed.has(card)) return;
+        processed.add(card);
+        const titleEl = card.querySelector('h4');
+        if (!titleEl) return;
+        const title = titleEl.textContent.trim();
+        const id = `${lessonId}_${title}`;
+        const checkbox = Object.assign(document.createElement('input'), {
+            type: 'checkbox',
+            id: `tracker_${id}`,
+            checked: !!completed[id],
+        });
+        checkbox.style.cssText = 'width: 18px; height: 18px; cursor: pointer;';
+        const label = Object.assign(document.createElement('label'), {
+            htmlFor: checkbox.id,
+            textContent: 'Done',
+        });
+        label.style.cssText = 'cursor: pointer; font-size: 14px; user-select: none;';
+        checkbox.addEventListener('change', () => {
+            completed[id] = checkbox.checked;
+            GM_setValue(storageKey, completed);
+            applyVisualState(card, checkbox.checked);
+        });
+        applyVisualState(card, checkbox.checked);
+        const container = document.createElement('div');
+        container.className = CHECKBOX_CLASS;
+        container.style.cssText = 'display: inline-flex; align-items: center; gap: 8px; margin-left: 12px;';
+        container.append(checkbox, label);
+        const buttonArea = card.querySelector('div.flex.shrink-0');
+        (buttonArea || titleEl.parentElement).appendChild(container);
+    }
+    function processCards() {
+        if (!active) return;
+        document.querySelectorAll(CARD_SELECTOR).forEach(addCheckbox);
+    }
+    initialize();
+    let lastUrl = window.location.href;
+    new MutationObserver(() => {
+        const currentUrl = window.location.href;
+        if (currentUrl !== lastUrl) {
+            lastUrl = currentUrl;
+            initialize();
+        } else {
+            processCards();
+        }
+    }).observe(document.body, {
+        childList: true,
+        subtree: true,
+    });
+})();
