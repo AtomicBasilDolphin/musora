@@ -1,0 +1,35 @@
+// ==UserScript==
+// @name         Drumeo Songs Auto-Redirect
+// @namespace    http://tampermonkey.net/
+// @version      1.6
+// @description  Redirect songs page to filtered view
+// @author       You
+// @match        https://app.musora.com/*
+// @grant        none
+// @run-at       document-end
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    function checkAndRedirect() {
+        if (window.location.pathname === '/drumeo/songs' && !window.location.search.includes('filters')) {
+            console.log('Redirecting to filtered view...');
+            window.location.href = 'https://app.musora.com/drumeo/songs/filters?filters=type,Transcriptions&sort=-published_on';
+        }
+    }
+
+    // Check immediately on load
+    checkAndRedirect();
+
+    // Monitor for URL changes with efficient polling
+    let lastUrl = window.location.href;
+    setInterval(() => {
+        const currentUrl = window.location.href;
+        if (currentUrl !== lastUrl) {
+            lastUrl = currentUrl;
+            checkAndRedirect();
+        }
+    }, 1000); // Check every 500ms instead of on every DOM change
+
+})();
