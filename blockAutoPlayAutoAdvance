@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Musora Stop Autoplay + Auto-Advance Blocker
 // @namespace    http://tampermonkey.net/
-// @version      9.0
+// @version      9.1
 // @description  Stop autoplay on page load/navigation and prevent auto-advance site-wide
 // @match        https://app.musora.com/*
 // @grant        none
@@ -9,11 +9,9 @@
 // ==/UserScript==
 (() => {
     'use strict';
-
     // ── Autoplay Blocker ──
     let blockAutoplay = true;
     let userHasInteracted = false;
-
     const originalPlay = HTMLMediaElement.prototype.play;
     HTMLMediaElement.prototype.play = function() {
         if (blockAutoplay && !userHasInteracted) {
@@ -21,55 +19,44 @@
         }
         return originalPlay.call(this);
     };
-
     const startBlocking = () => {
         blockAutoplay = true;
         userHasInteracted = false;
     };
-
     const markInteraction = () => {
         userHasInteracted = true;
     };
-
     const attachInteractionListeners = () => {
         ['click', 'mousedown', 'touchstart', 'keydown'].forEach(event => {
             document.addEventListener(event, markInteraction, { once: true, capture: true });
         });
     };
-
     // Intercept pushState/replaceState for autoplay blocking
     const originalPushState = history.pushState;
     const originalReplaceState = history.replaceState;
-
     history.pushState = function() {
         originalPushState.apply(this, arguments);
         startBlocking();
         attachInteractionListeners();
     };
-
     history.replaceState = function() {
         originalReplaceState.apply(this, arguments);
         startBlocking();
         attachInteractionListeners();
     };
-
     window.addEventListener('popstate', () => {
         startBlocking();
         attachInteractionListeners();
     });
-
     startBlocking();
     attachInteractionListeners();
-
     // ── Auto-Advance Blocker (installed once Vue Router is available) ──
     const installRouterGuard = () => {
         const appEl = document.querySelector('#app');
         if (!appEl || !appEl.__vue_app__) return false;
-
         const router = appEl.__vue_app__.config.globalProperties.$router;
         if (!router) return false;
-
-        // Track user-initiated navigation
+        // Track user-initiated navigation via clicks
         document.addEventListener('click', (e) => {
             const link = e.target.closest('a, button, [role="button"], [class*="playlist"]');
             if (link) {
@@ -77,34 +64,45 @@
                 setTimeout(() => { window._userClickedNav = false; }, 2000);
             }
         }, true);
-
-        router.beforeEach((to, from) => {
-            if (to.path !== from.path) {
-                const userClicked = window._userClickedNav;
-                window._userClickedNav = false;
-                if (userClicked) {
-                    console.log('[Musora Blocker] Allowed (user click):', to.path);
-                    return true;
-                }
-                console.log('[Musora Blocker] Blocked auto-advance:', from.path, '→', to.path);
-                return false;
+        // Track user-initiated navigation via keyboard (search, form submissions)
+        document.addEventListener('keydown', (e) => {
+            if (e.target.matches('input, textarea, [contenteditable]')) {
+                window._userClickedNav = true;
+                setTimeout(() => { window._userClickedNav = false; }, 2000);
             }
-            return true;
-        });
+        }, true);
+        router.beforeEach((to, from) => {
+    if (to.path !== from.path) {
+        const userClicked = window._userClickedNav;
+        window._userClickedNav = false;
 
+        // Always allow search and forum navigation
+        if (to.path.includes('/results') || to.path.includes('/search') || to.path.includes('/forums')) {
+            console.log('[Musora Blocker] Allowed (whitelisted):', to.path);
+            return true;
+        }
+
+        if (userClicked) {
+            console.log('[Musora Blocker] Allowed (user click):', to.path);
+            return true;
+        }
+
+        console.log('[Musora Blocker] Blocked auto-advance:', from.path, '→', to.path);
+        return false;
+    }
+    return true;
+});
+        });
         console.log('[Musora Blocker] Router guard installed');
         return true;
     };
-
     // Poll for Vue app to be ready
     const waitForRouter = setInterval(() => {
         if (installRouterGuard()) {
             clearInterval(waitForRouter);
         }
     }, 500);
-
     // Stop trying after 30s
     setTimeout(() => clearInterval(waitForRouter), 30000);
-
     console.log('[Musora Blocker] Autoplay blocker active, waiting for router...');
 })();
