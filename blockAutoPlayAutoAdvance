@@ -23,9 +23,15 @@
         blockAutoplay = true;
         userHasInteracted = false;
     };
+    //const markInteraction = () => {
+    //    userHasInteracted = true;
+    //};
+
     const markInteraction = () => {
-        userHasInteracted = true;
-    };
+    userHasInteracted = true;
+    // Reset after a short window so page-load autoplay is still blocked
+    setTimeout(() => { userHasInteracted = false; }, 500);
+};
     const attachInteractionListeners = () => {
         ['click', 'mousedown', 'touchstart', 'keydown'].forEach(event => {
             document.addEventListener(event, markInteraction, { once: true, capture: true });
@@ -71,27 +77,32 @@
                 setTimeout(() => { window._userClickedNav = false; }, 2000);
             }
         }, true);
+
         router.beforeEach((to, from) => {
     if (to.path !== from.path) {
         const userClicked = window._userClickedNav;
         window._userClickedNav = false;
-
-        // Always allow search and forum navigation
-        if (to.path.includes('/results') || to.path.includes('/search') || to.path.includes('/forums')) {
-            console.log('[Musora Blocker] Allowed (whitelisted):', to.path);
-            return true;
-        }
 
         if (userClicked) {
             console.log('[Musora Blocker] Allowed (user click):', to.path);
             return true;
         }
 
-        console.log('[Musora Blocker] Blocked auto-advance:', from.path, '→', to.path);
-        return false;
+        // Block programmatic navigation TO lesson/song pages (auto-advance)
+        const lessonPattern = /\/(lessons|songs|course-part)\//;
+        if (lessonPattern.test(to.path)) {
+            console.log('[Musora Blocker] Blocked auto-advance:', from.path, '→', to.path);
+            return false;
+        }
+
+        // Allow everything else
+        console.log('[Musora Blocker] Allowed (non-lesson):', to.path);
+        return true;
     }
     return true;
 });
+
+
         console.log('[Musora Blocker] Router guard installed');
         return true;
     };
